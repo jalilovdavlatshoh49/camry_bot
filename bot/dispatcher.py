@@ -17,4 +17,4 @@ dp = Dispatcher()
 
 # Подключение маршрутизаторов
 dp.include_router(user.router)
-dp.include_router(admin.router)
+dp.include_router(admin.router
