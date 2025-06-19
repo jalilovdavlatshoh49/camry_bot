@@ -4,7 +4,7 @@ from aiogram.types import Message
 import datetime
 import random
 
-from dispatcher import bot
+from bot.dispatcher import bot
 from config import ADMIN_ID
 from bot.services.logic import (
     update_request_status,
