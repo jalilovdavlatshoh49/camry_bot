@@ -11,7 +11,7 @@ from bot.services.logic import (
 )
 
 from config import ADMIN_ID
-from dispatcher import bot
+from bot.dispatcher import bot
 
 import datetime
 
