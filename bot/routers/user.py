@@ -5,7 +5,6 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from bot.keyboards import get_main_kb, get_register_kb
 from bot.services.logic import (
     register_user,
-    handle_puk_input,
     add_user,
     is_registered,
     insert_request
