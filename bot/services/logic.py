@@ -89,16 +89,7 @@ async def insert_code(user_id: int, vin: str, number: str, code: str, created_at
         )
         await db.commit()
 
-    # Отправка кода на внешний сервер
-    url = f"http://localhost:8000/{vin}/{number}"
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(url, json={"code": code})
-            response.raise_for_status()
-        except httpx.HTTPError as e:
-            print(f"HTTP Error: {e}")
-
-
+    
 # Удаление запроса
 async def delete_request(user_id: int, vin: str = None, number: str = None):
     async with aiosqlite.connect(DB_NAME) as db:
