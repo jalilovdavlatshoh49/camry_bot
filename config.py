@@ -1,1 +1,1 @@
-ADMIN_ID = 7217885105
+ADMIN_ID = админ_id
