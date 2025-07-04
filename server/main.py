@@ -1,4 +1,6 @@
 # server/main.py
+import threading
+import uvicorn
 
 from fastapi import FastAPI, HTTPException
 import aiosqlite
@@ -28,3 +30,11 @@ async def get_code_by_vin_and_puk(vin: str, puk: str):
         }
     else:
         raise HTTPException(status_code=404, detail="Code not found")
+    
+
+    # Запуск FastAPI-сервера в отдельном потоке
+def start_api():
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+if __name__ == "__main__":
+    threading.Thread(target=start_api).start()
