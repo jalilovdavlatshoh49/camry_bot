@@ -4,3 +4,4 @@ fastapi==0.95.2
 uvicorn==0.22.0
 aiosqlite
 httpx
+aiohttp==3.8.6
