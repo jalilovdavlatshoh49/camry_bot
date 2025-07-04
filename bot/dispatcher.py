@@ -1,6 +1,7 @@
 # bot/bot.py
 import os
 from aiogram import Bot, Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -10,4 +11,5 @@ if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN не установлен в .env файле!")
 
 bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
+storage = MemoryStorage()
+dp = Dispatcher(storage=storage)

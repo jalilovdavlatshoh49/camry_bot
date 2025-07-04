@@ -1,6 +1,11 @@
+import logging
+from typing import List, Tuple
+
 from aiogram import Router, types, F
 from aiogram.filters import BaseFilter, Command
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
 import datetime
 import random
 
@@ -16,77 +21,110 @@ from bot.services.logic import (
 
 router = Router()
 
+logger = logging.getLogger(__name__)
 
-# Фильтр для проверки, является ли пользователь админом
 class IsAdmin(BaseFilter):
     async def __call__(self, message: Message) -> bool:
         return message.from_user.id == ADMIN_ID
 
+class SearchStates(StatesGroup):
+    waiting_for_query = State()
 
-# Обработка кнопки "Одобрить"
-@router.callback_query(F.data.startswith("approve"))
-async def approve_code(callback: types.CallbackQuery):
-    _, user_id, vin, number = callback.data.split(":")
-    user_id = int(user_id)
-    code = ''.join(random.choices('0123456789', k=6))
-    now = datetime.datetime.now().isoformat()
 
-    await update_request_status(user_id, vin, number, "approved")
-    await insert_code(user_id, vin, number, code, now)
+def generate_code(length: int = 6) -> str:
+    return ''.join(random.choices('0123456789', k=length))
 
-    await bot.send_message(
-        user_id,
-        f"✅ Ваш код: <code>{code}</code>\nПожалуйста, введите его в приложении.",
-        parse_mode="HTML"
+
+def format_vin_info(vins: List[Tuple[str, str]]) -> str:
+    if not vins:
+        return "У этого пользователя нет подтвержденных VIN-кодов."
+    vin_lines = "\n".join(f"✅ VIN: <code>{vin}</code> | 📅 Дата: {date}" for vin, date in vins)
+    return f"Этот пользователь имеет {len(vins)} VIN-кодов со статусом ✅ 'approved':\n\n{vin_lines}"
+
+
+def format_user_info(user: Tuple[int, str, str, str], vins: List[Tuple[str, str]]) -> str:
+    user_id, first_name, last_name, phone = user
+    vin_info = format_vin_info(vins)
+    return (
+        f"👤 <b>{first_name} {last_name}</b>\n"
+        f"📞 Телефон: <code>{phone}</code>\n"
+        f"🆔 ID: <code>{user_id}</code>\n\n"
+        f"{vin_info}"
     )
-    await callback.answer("Код отправлен пользователю")
 
 
-# Обработка кнопки "Отклонить"
-@router.callback_query(F.data.startswith("reject"))
-async def reject_code(callback: types.CallbackQuery):
-    _, user_id = callback.data.split(":")
-    user_id = int(user_id)
+@router.callback_query(F.data.startswith("approve"))
+async def handle_approve(callback: CallbackQuery):
+    try:
+        parts = callback.data.split(":")
+        if len(parts) != 4:
+            raise ValueError("Некорректное количество частей в callback data")
 
-    await delete_request(user_id)
-    await bot.send_message(user_id, "❌ Ваша заявка была отклонена админом.")
-    await callback.answer("Заявка отклонена")
+        _, user_id_str, vin, number = parts
+        user_id = int(user_id_str)
 
+        code = generate_code()
+        timestamp = datetime.datetime.now().isoformat()
 
-# Команда /поиск только для админа
-@router.message(Command("поиск"), IsAdmin())
-async def cmd_search(msg: types.Message):
-    await msg.answer("🔍 Введите имя, фамилию, номер телефона или ID пользователя для поиска:")
+        await update_request_status(user_id, vin, number, "approved")
+        await insert_code(user_id, vin, number, code, timestamp)
 
-
-# Обработка текста после команды /поиск
-@router.message()
-async def handle_search_query(msg: types.Message):
-    query = msg.text.strip()
-    users = await search_user(query)
-
-    if not users:
-        await msg.answer("❌ Пользователь не найден.")
-        return
-
-    for user in users:
-        user_id, first_name, last_name, phone = user
-        vins = await get_approved_vins(user_id)
-
-        if not vins:
-            vin_info = "У этого пользователя нет подтвержденных VIN-кодов."
-        else:
-            vin_lines = "\n".join([
-                f"✅ VIN: <code>{vin}</code> | 📅 Дата: {date}" for vin, date in vins
-            ])
-            vin_info = (
-                f"Этот пользователь имеет {len(vins)} VIN-кодов со статусом ✅ 'approved':\n\n{vin_lines}"
-            )
-
-        await msg.answer(
-            f"👤 <b>{first_name} {last_name}</b>\n"
-            f"📞 Телефон: <code>{phone}</code>\n"
-            f"🆔 ID: <code>{user_id}</code>\n\n"
-            f"{vin_info}",
+        await bot.send_message(
+            user_id,
+            f"✅ Ваш код: <code>{code}</code>\nПожалуйста, введите его в приложении.",
             parse_mode="HTML"
         )
+        await callback.answer("Код отправлен пользователю ✅")
+
+    except Exception as e:
+        logger.error(f"Ошибка в handle_approve: {e}")
+        await callback.answer("❌ Ошибка при обработке заявки.", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("reject"))
+async def handle_reject(callback: CallbackQuery):
+    try:
+        parts = callback.data.split(":")
+        if len(parts) != 2:
+            raise ValueError("Некорректное количество частей в callback data")
+
+        _, user_id_str = parts
+        user_id = int(user_id_str)
+
+        await delete_request(user_id)
+        await bot.send_message(user_id, "❌ Ваша заявка была отклонена админом.")
+        await callback.answer("Заявка отклонена 🚫")
+
+    except Exception as e:
+        logger.error(f"Ошибка в handle_reject: {e}")
+        await callback.answer("❌ Ошибка при обработке заявки.", show_alert=True)
+
+
+@router.message(Command("search"), IsAdmin())
+async def cmd_search(msg: Message, state: FSMContext):
+    await state.set_state(SearchStates.waiting_for_query)
+    await msg.answer("🔍 Введите имя, фамилию, номер телефона или ID пользователя для поиска:")
+    
+
+
+@router.message(SearchStates.waiting_for_query)
+async def handle_search_query(msg: Message, state: FSMContext):
+    query = msg.text.strip()
+    try:
+        users = await search_user(query)
+        if not users:
+            await msg.answer("❌ Пользователь не найден.")
+            await state.clear()
+            return
+
+        for user in users:
+            user_id = user[0]
+            vins = await get_approved_vins(user_id)
+            formatted_message = format_user_info(user, vins)
+            await msg.answer(formatted_message, parse_mode="HTML")
+
+    except Exception as e:
+        logger.error(f"Ошибка в handle_search_query: {e}")
+        await msg.answer("❌ Произошла ошибка при поиске пользователя.")
+
+    await state.clear()
