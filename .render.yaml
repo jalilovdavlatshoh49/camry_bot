@@ -1,14 +1,6 @@
 services:
   - type: web
-    name: camry-api
-    env: python
-    plan: free
-    buildCommand: pip install --no-cache-dir -r requirements.txt
-    startCommand: uvicorn server.main:app --host 0.0.0.0 --port 10000
-    autoDeploy: true
-
-  - type: worker
     name: camry-bot
     env: python
-    buildCommand: pip install --no-cache-dir -r requirements.txt
+    buildCommand: pip install -r requirements.txt
     startCommand: python main.py

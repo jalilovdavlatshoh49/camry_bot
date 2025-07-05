@@ -7,7 +7,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 import datetime
-import random
+import hashlib
 
 from bot.dispatcher import bot
 from config import ADMIN_ID
@@ -31,8 +31,12 @@ class SearchStates(StatesGroup):
     waiting_for_query = State()
 
 
-def generate_code(length: int = 6) -> str:
-    return ''.join(random.choices('0123456789', k=length))
+def generate_code_from_puk(puk: str, length: int = 6) -> str:
+    hash_object = hashlib.sha256(puk.encode())
+    hex_dig = hash_object.hexdigest()
+    big_int = int(hex_dig, 16)
+    digits = str(big_int % (10 ** length)).zfill(length)
+    return digits
 
 
 def format_vin_info(vins: List[Tuple[str, str]]) -> str:
@@ -63,7 +67,9 @@ async def handle_approve(callback: CallbackQuery):
         _, user_id_str, vin, number = parts
         user_id = int(user_id_str)
 
-        code = generate_code()
+        # ✅ Тавлид кардани PUK ва коди якхела бо барнома
+        puk = f"{vin}_{number}".lower()
+        code = generate_code_from_puk(puk)
         timestamp = datetime.datetime.now().isoformat()
 
         await update_request_status(user_id, vin, number, "approved")
@@ -74,6 +80,7 @@ async def handle_approve(callback: CallbackQuery):
             f"✅ Ваш код: <code>{code}</code>\nПожалуйста, введите его в приложении.",
             parse_mode="HTML"
         )
+        
         await callback.answer("Код отправлен пользователю ✅")
 
     except Exception as e:

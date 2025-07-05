@@ -105,7 +105,6 @@ async def handle_puk_request(msg: types.Message, state: FSMContext):
         f"👤 Пользователь: {msg.from_user.full_name}\n"
         f"🆔 ID: {msg.from_user.id}\n"
         f"🚘 VIN: {vin.upper()}\n"
-        f"🔢 Номер: {number}"
     )
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
