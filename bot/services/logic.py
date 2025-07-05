@@ -1,157 +1,156 @@
-import re
-import random
-import datetime
 import httpx
-import aiosqlite
-
-from db.db import DB_NAME
+from db import db  # объект Database из db.py
 
 
-# Добавление или обновление пользователя
 async def add_user(user_id: int, first_name: str, last_name: str, phone: str):
-    async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute(
-            '''
-            INSERT OR REPLACE INTO users (user_id, first_name, last_name, phone)
-            VALUES (?, ?, ?, ?)
-            ''',
-            (user_id, first_name, last_name, phone)
-        )
-        await db.commit()
+    """
+    Добавляет нового пользователя или обновляет данные существующего по user_id.
+    """
+    query = """
+        INSERT INTO users (user_id, first_name, last_name, phone)
+        VALUES (:user_id, :first_name, :last_name, :phone)
+        ON CONFLICT (user_id) DO UPDATE SET
+            first_name = EXCLUDED.first_name,
+            last_name = EXCLUDED.last_name,
+            phone = EXCLUDED.phone;
+    """
+    await db.execute(query, {
+        "user_id": user_id,
+        "first_name": first_name,
+        "last_name": last_name,
+        "phone": phone
+    })
 
 
-# Проверка, зарегистрирован ли пользователь
 async def is_registered(user_id: int) -> bool:
-    async with aiosqlite.connect(DB_NAME) as db:
-        async with db.execute('SELECT 1 FROM users WHERE user_id = ?', (user_id,)) as cursor:
-            return await cursor.fetchone() is not None
+    """
+    Проверяет, зарегистрирован ли пользователь с заданным user_id.
+    Возвращает True если есть, иначе False.
+    """
+    query = "SELECT 1 FROM users WHERE user_id = :user_id"
+    row = await db.fetch_one(query, {"user_id": user_id})
+    return row is not None
 
 
-# Регистрация нового пользователя (с full_name)
 async def register_user(user_id: int, full_name: str):
-    async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute(
-            '''
-            INSERT OR IGNORE INTO users (user_id, full_name)
-            VALUES (?, ?)
-            ''',
-            (user_id, full_name)
-        )
-        await db.commit()
+    """
+    Регистрирует пользователя с полным именем (используется, если нет first/last name).
+    """
+    query = """
+        INSERT INTO users (user_id, first_name)
+        VALUES (:user_id, :full_name)
+        ON CONFLICT DO NOTHING
+    """
+    await db.execute(query, {"user_id": user_id, "full_name": full_name})
 
 
-# Сохранение нового запроса
 async def insert_request(user_id: int, vin: str, number: str, created_at: str):
-    async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute(
-            '''
-            INSERT INTO requests (user_id, vin, number, status, created_at)
-            VALUES (?, ?, ?, 'pending', ?)
-            ''',
-            (user_id, vin, number, created_at)
-        )
-        await db.commit()
+    """
+    Сохраняет новую заявку со статусом 'pending'.
+    """
+    query = """
+        INSERT INTO requests (user_id, vin, number, status, created_at)
+        VALUES (:user_id, :vin, :number, 'pending', :created_at)
+    """
+    await db.execute(query, {
+        "user_id": user_id,
+        "vin": vin,
+        "number": number,
+        "created_at": created_at
+    })
 
 
-# Обновление статуса запроса
 async def update_request_status(user_id: int, vin: str = None, number: str = None, status: str = "approved"):
-    async with aiosqlite.connect(DB_NAME) as db:
-        if vin and number:
-            await db.execute(
-                '''
-                UPDATE requests
-                SET status = ?
-                WHERE user_id = ? AND vin = ? AND number = ?
-                ''',
-                (status, user_id, vin, number)
-            )
-        else:
-            await db.execute(
-                '''
-                UPDATE requests
-                SET status = ?
-                WHERE user_id = ?
-                ''',
-                (status, user_id)
-            )
-        await db.commit()
+    """
+    Обновляет статус заявки. Если указаны vin и number — обновляет конкретную заявку,
+    иначе обновляет все заявки пользователя.
+    """
+    if vin and number:
+        query = """
+            UPDATE requests
+            SET status = :status
+            WHERE user_id = :user_id AND vin = :vin AND number = :number
+        """
+        values = {"status": status, "user_id": user_id, "vin": vin, "number": number}
+    else:
+        query = """
+            UPDATE requests
+            SET status = :status
+            WHERE user_id = :user_id
+        """
+        values = {"status": status, "user_id": user_id}
+
+    await db.execute(query, values)
 
 
-# Сохранение кода и отправка на внешний сервер
 async def insert_code(user_id: int, vin: str, number: str, code: str, created_at: str):
-    async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute(
-            '''
-            INSERT INTO codes (user_id, vin, number, code, created_at)
-            VALUES (?, ?, ?, ?, ?)
-            ''',
-            (user_id, vin, number, code, created_at)
-        )
-        await db.commit()
+    """
+    Сохраняет код и отправляет его на внешний сервер.
+    """
+    query = """
+        INSERT INTO codes (user_id, vin, number, code, created_at)
+        VALUES (:user_id, :vin, :number, :code, :created_at)
+    """
+    await db.execute(query, {
+        "user_id": user_id,
+        "vin": vin,
+        "number": number,
+        "code": code,
+        "created_at": created_at
+    })
 
-    
-# Удаление запроса
+    url = f"http://localhost:8000/{vin}/{number}"
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(url, json={"code": code})
+            response.raise_for_status()
+        except httpx.HTTPError as e:
+            print(f"HTTP Error при отправке кода: {e}")
+
+
 async def delete_request(user_id: int, vin: str = None, number: str = None):
-    async with aiosqlite.connect(DB_NAME) as db:
-        if vin and number:
-            await db.execute(
-                '''
-                DELETE FROM requests
-                WHERE user_id = ? AND vin = ? AND number = ?
-                ''',
-                (user_id, vin, number)
-            )
-        else:
-            await db.execute(
-                '''
-                DELETE FROM requests
-                WHERE user_id = ?
-                ''',
-                (user_id,)
-            )
-        await db.commit()
+    """
+    Удаляет заявку: либо конкретную (если vin и number заданы), либо все заявки пользователя.
+    """
+    if vin and number:
+        query = """
+            DELETE FROM requests
+            WHERE user_id = :user_id AND vin = :vin AND number = :number
+        """
+        values = {"user_id": user_id, "vin": vin, "number": number}
+    else:
+        query = """
+            DELETE FROM requests
+            WHERE user_id = :user_id
+        """
+        values = {"user_id": user_id}
+
+    await db.execute(query, values)
 
 
-# Поиск пользователей по id, имени, фамилии или телефону
 async def search_user(query: str):
-    async with aiosqlite.connect(DB_NAME) as db:
-        if query.isdigit():
-            cursor = await db.execute(
-                '''
-                SELECT user_id, first_name, last_name, phone
-                FROM users
-                WHERE user_id = ?
-                   OR first_name LIKE ?
-                   OR last_name LIKE ?
-                   OR phone LIKE ?
-                ''',
-                (int(query), f'%{query}%', f'%{query}%', f'%{query}%')
-            )
-        else:
-            cursor = await db.execute(
-                '''
-                SELECT user_id, first_name, last_name, phone
-                FROM users
-                WHERE first_name LIKE ?
-                   OR last_name LIKE ?
-                   OR phone LIKE ?
-                ''',
-                (f'%{query}%', f'%{query}%', f'%{query}%')
-            )
+    """
+    Поиск пользователей по user_id, имени, фамилии или телефону с использованием ILIKE (регистронезависимо).
+    """
+    like_query = f"%{query}%"
+    query_sql = """
+        SELECT user_id, first_name, last_name, phone
+        FROM users
+        WHERE CAST(user_id AS TEXT) ILIKE :q
+           OR first_name ILIKE :q
+           OR last_name ILIKE :q
+           OR phone ILIKE :q
+    """
+    return await db.fetch_all(query=query_sql, values={"q": like_query})
 
-        users = await cursor.fetchall()
-    return users
 
-# Получение одобренных VIN-ов пользователя
 async def get_approved_vins(user_id: int):
-    async with aiosqlite.connect(DB_NAME) as db:
-        cursor = await db.execute(
-            '''
-            SELECT vin, created_at
-            FROM requests
-            WHERE user_id = ? AND status = 'approved'
-            ''',
-            (user_id,)
-        )
-        vins = await cursor.fetchall()
-    return vins
+    """
+    Получение всех одобренных VIN-ов для пользователя.
+    """
+    query = """
+        SELECT vin, created_at
+        FROM requests
+        WHERE user_id = :user_id AND status = 'approved'
+    """
+    return await db.fetch_all(query, {"user_id": user_id})

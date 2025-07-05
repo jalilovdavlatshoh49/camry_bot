@@ -1,3 +1,5 @@
+import re
+import datetime
 from aiogram import Router, types, F
 from aiogram.filters import CommandStart
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -6,7 +8,6 @@ from aiogram.fsm.context import FSMContext
 
 from bot.keyboards import get_main_kb, get_register_kb
 from bot.services.logic import (
-    register_user,
     add_user,
     is_registered,
     insert_request
@@ -15,23 +16,20 @@ from bot.services.logic import (
 from config import ADMIN_ID
 from bot.dispatcher import bot
 
-import datetime
-
 router = Router()
 
-# === FSM состояния ===
+# === Состояния FSM ===
 class PUKStates(StatesGroup):
     waiting_for_vin = State()
 
 
-# /start — начало работы с ботом
+# === Команда /start ===
 @router.message(CommandStart())
 async def start_cmd(msg: types.Message):
-    if await is_registered(msg.from_user.id):
-        await msg.answer(
-            "✅ Вы уже зарегистрированы!",
-            reply_markup=get_main_kb()
-        )
+    user_id = msg.from_user.id
+
+    if await is_registered(user_id):
+        await msg.answer("✅ Вы уже зарегистрированы!", reply_markup=get_main_kb())
     else:
         await msg.answer(
             "👋 Добро пожаловать!\n\n"
@@ -43,7 +41,7 @@ async def start_cmd(msg: types.Message):
         )
 
 
-# Обработка контакта — регистрация пользователя
+# === Обработка контакта и регистрация пользователя ===
 @router.message(F.contact)
 async def register_user_handler(msg: types.Message):
     contact = msg.contact
@@ -70,7 +68,7 @@ async def register_user_handler(msg: types.Message):
     )
 
 
-# Команда "ПУК новый" — переход в состояние ожидания VIN
+# === Команда "ПУК новый" ===
 @router.message(F.text.casefold() == "пук новый")
 async def new_puk(msg: types.Message, state: FSMContext):
     if not await is_registered(msg.from_user.id):
@@ -81,35 +79,35 @@ async def new_puk(msg: types.Message, state: FSMContext):
     await msg.answer("✍️ Введите ПУК (в формате: VIN_номер)")
 
 
-# Обработка сообщений вида VIN_NUMBER (например, ABC1234_5678), если мы в нужном состоянии
+# === Обработка ПУК запроса (VIN_номер) ===
 @router.message(PUKStates.waiting_for_vin)
 async def handle_puk_request(msg: types.Message, state: FSMContext):
     text = msg.text.strip()
 
-    # Проверяем формат (VIN_номер)
-    import re
     if not re.fullmatch(r"[A-Z0-9]+_[0-9]+", text, flags=re.IGNORECASE):
         await msg.answer("❗️Неверный формат. Пожалуйста, введите ПУК в формате VIN_номер, например ABC1234_5678")
         return
 
     vin, number = text.split("_")
+    vin = vin.upper()
     now = datetime.datetime.now().isoformat()
 
-    await insert_request(msg.from_user.id, vin.upper(), number, now)
+    await insert_request(msg.from_user.id, vin, number, now)
     await state.clear()
 
     await msg.answer("⏳ Пожалуйста, подождите, пока админ подтвердит вашу заявку.")
 
+    # Уведомление админу
     text_admin = (
         f"🔔 Новый запрос на код!\n"
         f"👤 Пользователь: {msg.from_user.full_name}\n"
         f"🆔 ID: {msg.from_user.id}\n"
-        f"🚘 VIN: {vin.upper()}\n"
+        f"🚘 VIN: {vin}\n"
     )
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="✅ Одобрить", callback_data=f"approve:{msg.from_user.id}:{vin.upper()}:{number}"),
+            InlineKeyboardButton(text="✅ Одобрить", callback_data=f"approve:{msg.from_user.id}:{vin}:{number}"),
             InlineKeyboardButton(text="❌ Отклонить", callback_data=f"reject:{msg.from_user.id}")
         ]
     ])
@@ -117,7 +115,7 @@ async def handle_puk_request(msg: types.Message, state: FSMContext):
     await bot.send_message(ADMIN_ID, text_admin, reply_markup=kb)
 
 
-# Общий обработчик для прочих сообщений, когда пользователь не в состоянии ожидания VIN
+# === Обработка остальных сообщений ===
 @router.message(lambda msg: msg.text and not msg.text.startswith("/"))
 async def process_input(msg: types.Message, state: FSMContext):
     if not await is_registered(msg.from_user.id):
@@ -125,13 +123,8 @@ async def process_input(msg: types.Message, state: FSMContext):
         return
 
     current_state = await state.get_state()
-    
     if current_state == PUKStates.waiting_for_vin.state:
-        # Если пользователь находится в состоянии ожидания VIN, но прислал неверный формат
         await msg.answer("❗️Пожалуйста, введите ПУК в формате VIN_номер, например ABC1234_5678")
         return
 
-    if current_state is not None:
-        return
-    
     await msg.answer("ℹ️ Пожалуйста, нажмите кнопку 'ПУК новый', чтобы начать процесс отправки ПУК-кода.")
