@@ -115,20 +115,32 @@ async def delete_request(user_id: int, vin: str = None, number: str = None):
 # Поиск пользователей по id, имени, фамилии или телефону
 async def search_user(query: str):
     async with aiosqlite.connect(DB_NAME) as db:
-        cursor = await db.execute(
-            '''
-            SELECT user_id, first_name, last_name, phone
-            FROM users
-            WHERE user_id LIKE ?
-               OR first_name LIKE ?
-               OR last_name LIKE ?
-               OR phone LIKE ?
-            ''',
-            (f'%{query}%', f'%{query}%', f'%{query}%', f'%{query}%')
-        )
+        if query.isdigit():
+            cursor = await db.execute(
+                '''
+                SELECT user_id, first_name, last_name, phone
+                FROM users
+                WHERE user_id = ?
+                   OR first_name LIKE ?
+                   OR last_name LIKE ?
+                   OR phone LIKE ?
+                ''',
+                (int(query), f'%{query}%', f'%{query}%', f'%{query}%')
+            )
+        else:
+            cursor = await db.execute(
+                '''
+                SELECT user_id, first_name, last_name, phone
+                FROM users
+                WHERE first_name LIKE ?
+                   OR last_name LIKE ?
+                   OR phone LIKE ?
+                ''',
+                (f'%{query}%', f'%{query}%', f'%{query}%')
+            )
+
         users = await cursor.fetchall()
     return users
-
 
 # Получение одобренных VIN-ов пользователя
 async def get_approved_vins(user_id: int):
