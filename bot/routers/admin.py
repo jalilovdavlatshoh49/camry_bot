@@ -76,7 +76,7 @@ async def handle_approve(callback: CallbackQuery):
         _, user_id_str, vin, number = parts
         user_id = int(user_id_str)
 
-        puk = f"{vin}_{number}".lower()
+        puk = f"{vin}_{number}".upper()
         code = generate_code_from_puk(puk)
         timestamp = datetime.datetime.now().isoformat()
 
