@@ -27,6 +27,8 @@ async def disconnect_db():
 
 async def init_db():
     """Сохтани таблицаҳо агар вуҷуд надошта бошанд"""
+    await connect_db()  # Пеш аз ҳама пайваст шавем
+
     create_users = """
     CREATE TABLE IF NOT EXISTS users (
         user_id BIGINT PRIMARY KEY,
@@ -58,9 +60,10 @@ async def init_db():
     );
     """
 
-    # Иҷрои ҳамаи запросҳо
     await db.execute(create_users)
     await db.execute(create_codes)
     await db.execute(create_requests)
 
     print("📦 Базаи PostgreSQL муваффақона инициализатсия шуд.")
+    
+    await disconnect_db()  # Пас аз кор ҷудо шавем
