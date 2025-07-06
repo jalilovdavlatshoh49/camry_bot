@@ -44,13 +44,21 @@ def generate_code_from_puk(puk: str, length: int = 6) -> str:
     return digits
 
 
-# === Форматирование VIN-кодов ===
-def format_vin_info(vins: List[Tuple[str, str]]) -> str:
+
+def format_vin_info(vins: List[Tuple[str, str]], first_name: str, phone: str) -> str:
     if not vins:
-        return "❌ У этого пользователя нет подтвержденных VIN-кодов."
+        return (
+            f"👤 Имя: {first_name}\n"
+            f"📞 Телефон: {phone}\n\n"
+            "❌ У этого пользователя нет подтверждённых VIN-кодов."
+        )
 
     vin_lines = "\n".join(f"✅ VIN: <code>{vin}</code> | 📅 Дата: {date}" for vin, date in vins)
-    return f"✅ Подтверждённые VIN-коды ({len(vins)}):\n\n{vin_lines}"
+    return (
+        f"👤 Имя: {first_name}\n"
+        f"📞 Телефон: {phone}\n\n"
+        f"✅ Подтверждённые VIN-коды ({len(vins)}):\n\n{vin_lines}"
+    )
 
 
 # === Форматирование информации о пользователе ===
