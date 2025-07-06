@@ -2,6 +2,7 @@ import re
 import datetime
 from aiogram import Router, types, F
 from aiogram.filters import CommandStart
+from aiogram.filters import StateFilter
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
@@ -116,7 +117,10 @@ async def handle_puk_request(msg: types.Message, state: FSMContext):
 
 
 # === Обработка остальных сообщений ===
-@router.message(lambda msg: msg.text and not msg.text.startswith("/"))
+@router.message(
+    StateFilter(None, PUKStates.waiting_for_vin),  # Танҳо агар стейт None ё PUK бошад
+    lambda msg: msg.text and not msg.text.startswith("/")  # Танҳо агар команда набошад
+)
 async def process_input(msg: types.Message, state: FSMContext):
     if not await is_registered(msg.from_user.id):
         await msg.answer("❗️Сначала зарегистрируйтесь.")
