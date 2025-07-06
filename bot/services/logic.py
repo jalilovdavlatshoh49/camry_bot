@@ -85,7 +85,7 @@ async def update_request_status(user_id: int, vin: str = None, number: str = Non
 
 async def insert_code(user_id: int, vin: str, number: str, code: str, created_at: str):
     """
-    Сохраняет код и отправляет его на внешний сервер.
+    Сохтани рекорд дар ҷадвали codes.
     """
     query = """
         INSERT INTO codes (user_id, vin, number, code, created_at)
@@ -98,14 +98,6 @@ async def insert_code(user_id: int, vin: str, number: str, code: str, created_at
         "code": code,
         "created_at": created_at
     })
-
-    url = f"http://localhost:8000/{vin}/{number}"
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(url, json={"code": code})
-            response.raise_for_status()
-        except httpx.HTTPError as e:
-            print(f"HTTP Error при отправке кода: {e}")
 
 
 async def delete_request(user_id: int, vin: str = None, number: str = None):
